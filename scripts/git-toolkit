@@ -1,0 +1,61 @@
+function git-remove-refs()
+{
+  if [ -z $@ ] ; then
+    echo "Usage: git-remove-refs refs_name"
+    return
+  fi
+  git for-each-ref --format="%(refname)" refs/$1 | xargs -I Ref bash -c "echo removing git ref: Ref; git update-ref -d Ref"
+}
+ 
+function git-backup-files()
+{
+  FILES=`git ls-files $@`
+  for File in $FILES
+  do
+    echo save backup for $File
+  done
+  GIT_BACKUP_TMP=`tempfile`.tar.gz
+  tar czf $GIT_BACKUP_TMP $FILES
+  echo backup file saved at $GIT_BACKUP_TMP
+}
+ 
+function git-restore-files()
+{
+  if [ -f $GIT_BACKUP_TMP ] ; then
+    echo backup file $GIT_BACKUP_TMP restored
+    tar xzf $GIT_BACKUP_TMP
+    unset GIT_BACKUP_TMP
+  fi
+}
+ 
+function git-rewrite-commits()
+{
+  if [ -z $@ ] ; then
+    echo "Usage: git-rewrite-commits files_to_remove"
+    return
+  fi
+  git-backup-files $@
+  git filter-branch --index-filter "git ls-files -z $@ | git update-index --remove -z --stdin"
+  git-remove-refs original
+  git-restore-files
+}
+ 
+function git-prune-commits()
+{
+  if [ ! -z $@ ] ; then
+    echo "Usage: git-prune-commits"
+    return
+  fi
+  git filter-branch --prune-empty
+  git-remove-refs original
+}
+ 
+function git-rewrite-msg()
+{
+  if [ -z $@ ] ; then
+    echo "Usage: git-rewrite-msg regex_pattern"
+    return
+  fi
+  git filter-branch --msg-filter "sed -e \"$1\""
+  git-remove-refs original
+}

@@ -1,0 +1,120 @@
+#! /usr/bin/env bash
+
+VERSION=1.9.9
+PKG_NAME=
+TMP_DIR=~/tmp
+BASE_DIR=/opt/nginx
+DATA_DIR=/srv/web
+VAR_DIR=/var/nginx
+SERVICE_DIR=/etc/systemd/system
+USER=nginx
+
+if [ "$1" != "" ]
+then
+    VERSION=$1
+fi
+
+PKG_NAME=nginx-${VERSION}
+
+yum install -y make gcc pcre-devel openssl-devel
+
+mkdir -p ${TMP_DIR}
+cd ${TMP_DIR}
+curl -O http://nginx.org/download/${PKG_NAME}.tar.gz
+tar xvzf ${PKG_NAME}.tar.gz
+cd ${PKG_NAME}
+./configure \
+    --prefix=${BASE_DIR} \
+    --user=${USER} \
+    --group=${GROUP} \
+    --with-http_ssl_module \
+    --with-http_v2_module \
+    --with-stream \
+    --with-stream_ssl_module
+make && make PREFIX=${BASE_DIR} install
+
+cd ~
+
+useradd -rMK UMASK=027 ${USER}
+
+mkdir -p ${DATA_DIR}
+chown -R ${USER}.${USER} ${DATA_DIR}
+chmod -R g-w,o-rwx ${DATA_DIR}
+
+mkdir -p ${VAR_DIR}/{run,log}
+chown -R ${USER}.${USER} ${VAR_DIR}
+chmod -R g-w,o-rwx ${VAR_DIR}
+
+mkdir -p ${BASE_DIR}/conf/nginx.conf.d
+cat > ${BASE_DIR}/conf/nginx.conf <<EOF
+user                nobody nobody;
+worker_processes    4;
+pid                 ${VAR_DIR}/run/nginx.pid;
+error_log           ${VAR_DIR}/log/error.log;
+
+events {
+    use                 epoll;
+    worker_connections  4096;
+}
+
+http {
+    include             mime.types;
+    default_type        application/octet-stream;
+    server_tokens       off;
+
+    access_log          off;
+
+    sendfile            on;
+    directio            4m;
+
+    keepalive_requests  64;
+    keepalive_timeout   15;
+
+    include nginx.conf.d/*.conf;
+}
+EOF
+
+cat > ${BASE_DIR}/conf/nginx.conf.d/_.conf <<EOF
+# _
+server {
+    listen          80;
+    server_name     _;
+    root            /srv/web;
+    charset         utf-8;
+
+    location / {
+        index   index.html;
+    }
+}
+EOF
+
+if [ -d "${SERVICE_DIR}" ]
+then
+    cat > ${SERVICE_DIR}/nginx.service <<EOF
+[Unit]
+Description=Nginx Server
+After=network.target
+
+[Service]
+Type=forking
+PIDFile=${VAR_DIR}/run/nginx.pid
+ExecStart=${BASE_DIR}/sbin/nginx
+ExecReload=${BASE_DIR}/sbin/nginx -s reload
+ExecStop=${BASE_DIR}/sbin/nginx -s stop
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl enable nginx
+fi
+
+cat > /etc/profile.d/nginx.sh <<EOF
+export PATH=$PATH:${BASE_DIR}/sbin
+EOF
+
+rm -rf ${TMP_DIR}/${PKG_NAME}/
+rm -f ${TMP_DIR}/${PKG_NAME}.tar.gz
+
+sync
+
+echo "Done"

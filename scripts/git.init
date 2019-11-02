@@ -1,0 +1,11 @@
+#! /bin/sh
+
+git config --global user.name "DJ-NotYet"
+git config --global user.email "dj.notyet@gmail.com"
+git config --global core.editor vim
+git config --global core.autocrlf input
+git config --global color.ui true
+git config --global push.default simple
+#git config --global commit.template $HOME/.gitmessage.txt
+#git config --global user.signingkey <gpg-key-id>
+

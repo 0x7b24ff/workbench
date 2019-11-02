@@ -1,0 +1,25 @@
+#! /usr/bin/env bash
+
+USAGE='Usage: bash fetch LIST_FILE [TAG_NAME]'
+LIST_FILE=$1
+TAG_NAME=$2
+
+if [ -z "$LIST_FILE" ]; then
+    echo $USAGE
+    exit 1
+fi
+
+while read LINE; do
+    FIELDS=(${LINE//,/ })
+    TAG=${FIELDS[0]}
+    URL=${FIELDS[1]}
+    DIR=${FIELDS[2]}
+    if [ ! -z "$TAG_NAME" ] && [ "$TAG" != "$TAG_NAME" ]; then
+        continue
+    fi
+    if [ -d "$DIR" ]; then
+        echo "$DIR exists, skipped"
+        continue
+    fi
+    git clone $URL $DIR
+done < $LIST_FILE

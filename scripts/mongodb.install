@@ -1,0 +1,120 @@
+#! /usr/bin/env bash
+
+VERSION=3.2.0
+ARCH=linux-x86_64-rhel70
+PKG_NAME=
+BASE_DIR=/opt/mongodb
+DATA_DIR=/data/mongodb
+VAR_DIR=/var/mongodb
+SERVICE_DIR=/etc/systemd/system
+USER=mongodb
+
+TMP_DIR=~/tmp
+
+if [ "$1" != "" ]
+then
+    VERSION=$1
+fi
+
+if [ "$2" != "" ]
+then
+    ARCH=$2
+fi
+
+PKG_NAME=mongodb-${ARCH}-${VERSION}
+
+mkdir -p ${TMP_DIR}
+cd ${TMP_DIR}
+curl -O https://fastdl.mongodb.org/linux/${PKG_NAME}.tgz
+tar xvzf ${PKG_NAME}.tgz
+mv ${PKG_NAME} ${BASE_DIR}
+
+cd ~
+
+useradd -rMK UMASK=027 ${USER}
+
+mkdir -p ${DATA_DIR}
+chown -R ${USER}.${USER} ${DATA_DIR}
+chmod -R g-w,o-rwx ${DATA_DIR}
+
+mkdir -p ${VAR_DIR}/{run,log}
+chown -R ${USER}.${USER} ${VAR_DIR}
+chmod -R g-w,o-rwx ${VAR_DIR}
+
+mkdir -p ${BASE_DIR}/etc
+cat > ${BASE_DIR}/etc/mongod.conf <<EOF
+systemLog:
+    verbosity: 0
+    quiet: false
+    traceAllExceptions: false
+    path: ${VAR_DIR}/log/mongod.log
+    logAppend: true
+    logRotate: rename
+    destination: file
+
+processManagement:
+    fork: true
+    pidFilePath: ${VAR_DIR}/run/mongod.pid
+
+net:
+    port: 27017
+    bindIp: 0.0.0.0
+    maxIncomingConnections: 65535
+    wireObjectCheck: true
+    ipv6: false
+    unixDomainSocket:
+        enabled: false
+        pathPrefix: /tmp
+        filePermissions: 0700
+
+security:
+    authorization: enabled
+    javascriptEnabled: true
+
+storage:
+    dbPath: ${DATA_DIR}
+    indexBuildRetry: true
+    directoryPerDB: true
+    engine: wiredTiger
+    journal:
+        enabled: true
+
+operationProfiling:
+    slowOpThresholdMs: 100
+    mode: slowOp
+
+setParameter:
+    enableLocalhostAuthBypass: true
+EOF
+
+if [ -d "${SERVICE_DIR}" ]
+then
+    cat > ${SERVICE_DIR}/mongodb.service <<EOF
+[Unit]
+Description=Mongodb Server
+After=network.target
+
+[Service]
+User=${USER}
+Group=${USER}
+Type=forking
+PIDFile=${VAR_DIR}/run/mongod.pid
+ExecStartPre=/bin/rm -f ${DATA_DIR}/mongod.lock
+ExecStart=${BASE_DIR}/bin/mongod -f ${BASE_DIR}/etc/mongod.conf
+ExecStop=/bin/kill -3 $MAINPID
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl enable mongodb
+fi
+
+cat > /etc/profile.d/mongodb.sh <<EOF
+export PATH=$PATH:${BASE_DIR}/bin
+EOF
+
+rm -f ${TMP_DIR}/${PKG_NAME}.tar.gz
+
+sync
+
+echo "Done"

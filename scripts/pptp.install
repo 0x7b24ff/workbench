@@ -1,0 +1,30 @@
+#! /bin/sh
+
+PREFIX="192.168.144"
+
+if [ "$1" != "" ]
+then
+    PREFIX=$1
+fi
+
+yum install -y ppp pptpd
+
+echo "localip $PREFIX.1" >> /etc/pptpd.conf
+echo "remoteip $PREFIX.128-254" >> /etc/pptpd.conf
+
+sed -i "s/^#ms-dns 10.0.0.1/ms-dns 8.8.8.8/" /etc/ppp/options.pptpd
+sed -i "s/^#ms-dns 10.0.0.2/ms-dns 8.8.4.4/" /etc/ppp/options.pptpd
+
+echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+sysctl -p
+
+iptables -I INPUT -p tcp --dport 1723 -j ACCEPT
+iptables -I INPUT -p gre -j ACCEPT
+iptables -t nat -A POSTROUTING -o eth0 -s $PREFIX.0/24 -j MASQUERADE
+iptables -I FORWARD -s $PREFIX.0/24 -j ACCEPT
+iptables -I FORWARD -d $PREFIX.0/24 -j ACCEPT
+service iptables save
+
+systemctl enable pptpd
+systemctl start pptpd
+

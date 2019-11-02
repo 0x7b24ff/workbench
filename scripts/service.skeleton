@@ -1,0 +1,111 @@
+#!/bin/bash
+#
+# NAME
+#
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Predefinitions
+# Name of the program
+D_NAME=
+
+# Path of the program file
+D_BINFILE=
+
+# Parameter of the program
+D_PARAM=
+
+# Path of the pid file
+D_PIDFILE=/var/run/${D_NAME}.pid
+
+# Path of the lock file
+D_LOCKFILE=/var/lock/subsys/${D_NAME}
+
+# Path of the log file
+D_LOGFILE=/var/log/${D_NAME}.log
+
+# Return value
+RETURN_VALUE=0
+
+# Start daemon
+start() {
+	echo -n $"Starting $D_NAME ... "
+	if [ -e "$D_PIDFILE" ]
+	then
+		echo $"$D_NAME already running."
+		return 1
+	fi
+	daemon $D_BINFILE $D_PARAM
+	RETURN_VALUE=$?
+	echo
+	if [ 0 -eq $RETURN_VALUE ]
+	then
+		echo > $D_PIDFILE `pidof -s $D_BINFILE`
+		touch $D_LOCKFILE
+		date +"[%Y-%m-%d %T:%M:%S]: $D_NAME started." >> $D_LOGFILE
+	else
+		date +"[%Y-%m-%d %T:%M:%S]: Start $D_NAME failed (with exit code $RETURN_VALUE)." >> $D_LOGFILE
+	fi
+}
+
+# Stop daemon
+stop() {
+	echo -n $"Stopping $D_NAME ... "
+	if [ ! -e "$D_PIDFILE" ]
+	then
+		echo $"$D_NAME not running."
+		return 1
+	fi
+	killproc -p $D_PIDFILE $D_BINFILE
+	RETURN_VALUE=$?
+	echo
+	if [ 0 -eq $RETURN_VALUE ]
+	then
+		rm -f $D_LOCKFILE $D_PIDFILE
+		date +"[%Y-%m-%d %T:%M:%S]: $D_NAME stopped." >> $D_LOGFILE
+	else
+		date +"[%Y-%m-%d %T:%M:%S]: Stop $D_NAME failed (with exit code $RETURN_VALUE)." >> $D_LOGFILE
+	fi
+}
+
+# Reset daemon
+reset() {
+	echo -n $"Resetting $D_NAME ... "
+	killall $D_BINFILE
+	rm -f $D_LOCKFILE $D_PIDFILE
+	RETURN_VALUE=$?
+	echo
+	if [ 0 -eq $RETURN_VALUE ]
+	then
+		date +"[%Y-%m-%d %T:%M:%S]: $D_NAME reset." >> $D_LOGFILE
+	else
+		date +"[%Y-%m-%d %T:%M:%S]: Reset $D_NAME failed (with exit code $RETURN_VALUE)." >> $D_LOGFILE
+	fi
+}
+
+# Main dispatcher
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	status)
+		status $D_BINFILE
+		RETURN_VALUE=$?
+		;;
+	restart)
+		stop
+		start
+		;;
+	reset)
+		reset
+		;;
+	*)
+		echo "Usage: $D_NAME {start|stop|restart|reset|status}"
+		exit 1
+esac
+
+exit $RETURN_VALUE

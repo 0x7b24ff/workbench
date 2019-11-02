@@ -1,0 +1,12 @@
+#! /bin/sh
+
+yum install -y iptables-services
+
+systemctl stop firewalld
+systemctl disable firewalld
+
+yum remove -y firewalld
+
+systemctl enable iptables
+systemctl start iptables
+

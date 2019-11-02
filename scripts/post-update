@@ -1,0 +1,30 @@
+#!/bin/sh
+#
+# An example hook script to prepare a packed repository for use over
+# dumb transports.
+#
+# To enable this hook, rename this file to "post-update".
+
+# Variables
+BRANCH="master"
+PWD=`pwd -P`
+DIR="${PWD}/../"
+GIT_DIR_old=$GIT_DIR
+unset GIT_DIR
+
+# Procedures
+echo "Updating workplace..."
+cd $DIR
+RETVAL=`git branch | grep -e " $BRANCH$"`
+if [ "$RETVAL" != "" ]
+then
+    git checkout -f $BRANCH
+    git reset --hard HEAD
+    sync
+else
+    echo "Branch '${BRANCH}' not exist, synchronize skipped."
+fi
+
+# Restoration
+GIT_DIR=$GIT_DIR_old
+git update-server-info

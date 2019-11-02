@@ -1,0 +1,60 @@
+#! /bin/sh
+
+# Reset
+unset GOROOT
+unset GOROOT_BOOTSTRAP
+unset GOBIN
+unset GOPATH
+
+# Variables
+BASE_DIR=`pwd`
+BOOTSTRAP_TAG=go1.4.3
+BOOTSTRAP_DIR=$BASE_DIR/go-1.4.3
+TARGET_TAG=
+TARGET_DIR=
+
+# Parameters
+if [ -z "$1" ]
+then
+    echo "Usage: ./build.sh TARGET PATH"
+    exit 1
+fi
+if [ -z "$2" ]
+then
+    echo "Usage: ./build.sh TARGET PATH"
+    exit 1
+fi
+
+TARGET_TAG=$1
+TARGET_DIR=$2
+
+# Begin
+cd $BASE_DIR
+
+git clone -b $BOOTSTRAP_TAG --depth 1 https://github.com/golang/go $BOOTSTRAP_DIR
+git clone -b $TARGET_TAG --depth 1 https://github.com/golang/go $TARGET_DIR
+
+cd $BOOTSTRAP_DIR/src
+GOROOT=$BOOTSTRAP_DIR bash ./all.bash
+
+cd $TARGET_DIR/src
+GOROOT=$TARGET_DIR GOROOT_BOOTSTRAP=$BOOTSTRAP_DIR bash ./all.bash
+
+# Additional
+cd $TARGET_DIR
+
+mkdir -p $BASE_DIR/src/golang.org/x/net
+mkdir -p $BASE_DIR/src/golang.org/x/tools
+git clone --depth 1 https://github.com/golang/net $BASE_DIR/src/golang.org/x/net
+git clone --depth 1 https://github.com/golang/tools $BASE_DIR/src/golang.org/x/tools
+
+cd $BASE_DIR
+GOPATH=$BASE_DIR GOBIN=$TARGET_DIR/bin $TARGET_DIR/bin/go install golang.org/x/tools/cmd/...
+
+# Cleanup
+rm -rf $BOOTSTRAP_DIR
+rm -rf $BASE_DIR/src
+rm -rf $BASE_DIR/pkg
+
+echo "All Done"
+

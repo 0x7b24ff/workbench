@@ -1,0 +1,78 @@
+#! /usr/bin/env bash
+
+VERSION=3.0.6
+PKG_NAME=
+TMP_DIR=~/tmp
+BASE_DIR=/opt/redis
+DATA_DIR=/data/redis
+VAR_DIR=/var/redis
+SERVICE_DIR=/etc/systemd/system
+USER=redis
+
+if [ "$1" != "" ]
+then
+    VERSION=$1
+fi
+
+PKG_NAME=redis-${VERSION}
+
+yum install -y make gcc
+
+mkdir -p ${TMP_DIR}
+cd ${TMP_DIR}
+curl -O http://download.redis.io/releases/${PKG_NAME}.tar.gz
+tar xvzf ${PKG_NAME}.tar.gz
+cd ${PKG_NAME}
+make && make PREFIX=${BASE_DIR} install
+
+cd ~
+
+useradd -rMK UMASK=027 ${USER}
+
+mkdir -p ${DATA_DIR}
+chown -R ${USER}.${USER} ${DATA_DIR}
+chmod -R g-w,o-rwx ${DATA_DIR}
+
+mkdir -p ${VAR_DIR}/{run,log}
+chown -R ${USER}.${USER} ${VAR_DIR}
+chmod -R g-w,o-rwx ${VAR_DIR}
+
+mkdir -p ${BASE_DIR}/etc
+cp ${TMP_DIR}/${PKG_NAME}/redis.conf ${BASE_DIR}/etc/redis.conf
+sed -ir "s/^daemonize no/daemonize yes/" ${BASE_DIR}/etc/redis.conf
+sed -ir "s/^pidfile \/var\/run\/redis[_0-9]*.pid/pidfile ${VAR_DIR//\//\\/}\/run\/redis.pid/" ${BASE_DIR}/etc/redis.conf
+sed -ir "s/^logfile \"\"/logfile ${VAR_DIR//\//\\/}\/log\/redis.log/" ${BASE_DIR}/etc/redis.conf
+sed -ir "s/^dbfilename dump.rdb/dbfilename redis.rdb/" ${BASE_DIR}/etc/redis.conf
+sed -ir "s/^dir \.\//dir ${DATA_DIR//\//\\/}\//" ${BASE_DIR}/etc/redis.conf
+
+if [ -d "${SERVICE_DIR}" ]
+then
+    cat > ${SERVICE_DIR}/redis.service <<EOF
+[Unit]
+Description=Redis Server
+After=network.target
+
+[Service]
+User=${USER}
+Group=${USER}
+Type=forking
+PIDFile=${VAR_DIR}/run/redis.pid
+ExecStart=${BASE_DIR}/bin/redis-server ${BASE_DIR}/etc/redis.conf
+ExecStop=/bin/kill -3 $MAINPID
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl enable redis
+fi
+
+cat > /etc/profile.d/redis.sh <<EOF
+export PATH=$PATH:${BASE_DIR}/bin
+EOF
+
+rm -rf ${TMP_DIR}/${PKG_NAME}/
+rm -f ${TMP_DIR}/${PKG_NAME}.tar.gz
+
+sync
+
+echo "Done"

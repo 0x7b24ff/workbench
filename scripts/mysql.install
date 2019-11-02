@@ -1,0 +1,86 @@
+#! /usr/bin/env bash
+
+VERSION=5.6.28
+PKG_NAME=
+TMP_DIR=~/tmp
+BASE_DIR=/opt/mysql
+DATA_DIR=/data/mysql
+VAR_DIR=/var/mysql
+SERVICE_DIR=/etc/systemd/system
+USER=mysql
+
+if [ "$1" != "" ]
+then
+    VERSION=$1
+fi
+
+PKG_NAME=mysql-${VERSION}
+
+yum install -y make cmake gcc gcc-c++ bison ncurses-devel
+
+mkdir -p ${TMP_DIR}
+cd ${TMP_DIR}
+curl -LO http://dev.mysql.com/get/Downloads/MySQL-5.6/${PKG_NAME}.tar.gz
+tar xvzf ${PKG_NAME}.tar.gz
+cd ${PKG_NAME}
+cmake . \
+    -DCMAKE_INSTALL_PREFIX=${BASE_DIR} \
+    -DDEFAULT_CHARSET=utf8 \
+    -DDEFAULT_COLLATION=utf8_general_ci \
+    -DMYSQL_DATADIR=${DATA_DIR} \
+    -DSYSCONFDIR=${BASE_DIR}/etc
+make && make install
+
+cd ~
+
+useradd -rMK UMASK=027 ${USER}
+
+mkdir -p ${DATA_DIR}
+chown -R ${USER}.${USER} ${DATA_DIR}
+chmod -R g-w,o-rwx ${DATA_DIR}
+
+mkdir -p ${VAR_DIR}/{run,log}
+chown -R ${USER}.${USER} ${VAR_DIR}
+chmod -R g-w,o-rwx ${VAR_DIR}
+
+mkdir -p ${BASE_DIR}/etc
+cp ${TMP_DIR}/${PKG_NAME}/support-files/my-default.cnf ${BASE_DIR}/etc/my.cnf
+sed -ri "s/^# basedir = \.\.\.\.\./basedir = ${BASE_DIR//\//\\/}/" ${BASE_DIR}/etc/my.cnf
+sed -ri "s/^# datadir = \.\.\.\.\./datadir = ${DATA_DIR//\//\\/}/" ${BASE_DIR}/etc/my.cnf
+sed -ri "s/^# port = \.\.\.\.\./bind-address = 0.0.0.0\nport = 3306/" ${BASE_DIR}/etc/my.cnf
+
+bash ${TMP_DIR}/${PKG_NAME}/scripts/mysql_install_db.sh \
+    --defaults-file=${BASE_DIR}/etc/my.cnf \
+    --basedir=${BASE_DIR} \
+    --user=${USER}
+chown -R ${USER}.${USER} ${DATA_DIR}
+
+if [ -d "${SERVICE_DIR}" ]
+then
+    cat > ${SERVICE_DIR}/mysql.service <<EOF
+[Unit]
+Description=MySQL Server
+After=network.target
+
+[Service]
+User=${USER}
+Group=${USER}
+Type=simple
+ExecStart=${BASE_DIR}/bin/mysqld_safe --defaults-file=${BASE_DIR}/etc/my.cnf
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl enable mysql
+fi
+
+cat > /etc/profile.d/mysql.sh <<EOF
+export PATH=$PATH:${BASE_DIR}/bin
+EOF
+
+rm -rf ${TMP_DIR}/${PKG_NAME}/
+rm -f ${TMP_DIR}/${PKG_NAME}.tar.gz
+
+sync
+
+echo "Done"

@@ -1,0 +1,13 @@
+# profile for darwin
+
+WORKBENCH=$HOME/.workbench
+
+# Aliases
+source $WORKBENCH/profile/.aliases
+alias tl='sysctl machdep.xcpm.cpu_thermal_level'
+
+# Environments
+export PATH=$PATH:$WORKBENCH/bin
+export PATH=$PATH:$WORKBENCH/node_modules/.bin
+
+export HISTCONTROL=ignoreboth

@@ -1,0 +1,7 @@
+#! /usr/bin/env bash
+
+PID=`ps x | grep ssh | grep 1090 | awk '{ print $1 }'`
+if [[ ! -z "${PID// }" ]]; then
+    kill $PID
+fi
+ssh -fgCND 127.0.0.1:1090 -p$TUNNEL_PORT $TUNNEL_HOST

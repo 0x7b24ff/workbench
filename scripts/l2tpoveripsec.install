@@ -1,0 +1,91 @@
+#! /bin/sh
+
+PUBLIC_IP="127.0.0.1"
+PSK="L2TPOverIPSec"
+PREFIX="192.168.144"
+
+if [ "$1" == "" ]
+then
+    "Usage: $0 PUBLIC_IP [PSK] [NETWORK_PREFIX]"
+    exit
+else
+    PUBLIC_IP=$1
+fi
+
+if [ "$2" != "" ]
+then
+    PSK=$2
+fi
+
+if [ "$3" != "" ]
+then
+    PREFIX=$3
+fi
+
+yum install -y iptables iptables-service
+yum install -y openswan xl2tpd ppp
+
+cat >> /etc/ipsec.d/l2tp.conf <<EOF
+# IPSec Config for L2TP
+
+conn L2TP-PSK-NAT
+    rightsubnet=vhost:%priv
+    also=L2TP-PSK-noNAT
+
+conn L2TP-PSK-noNAT
+    authby=secret
+    pfs=no
+    auto=add
+    keyingtries=3
+    rekey=no
+    ikelifetime=8h
+    keylife=1h
+    type=transport
+    left=${PUBLIC_IP}
+    leftprotoport=17/1701
+    right=%any
+    rightprotoport=17/%any
+    dpddelay=40
+    dpdtimeout=130
+    dpdaction=clear
+EOF
+
+cat >> /etc/ipsec.d/l2tp.secrets <<EOF
+# IPSec Secrets for L2TP
+${PUBLIC_IP} %any: PSK "${PSK}"
+EOF
+
+sed -ri "s/^; listen-addr = .+/listen-addr = ${PUBLIC_IP}/" /etc/xl2tpd/xl2tpd.conf
+sed -ri "s/^ip range = .+/ip range = ${PREFIX}.4-${PREFIX}.254/" /etc/xl2tpd/xl2tpd.conf
+sed -ri "s/^local ip = .+/local ip = ${PREFIX}.1/" /etc/xl2tpd/xl2tpd.conf
+sed -ri "s/^name = .+/name = L2TPOverIPSec/" /etc/xl2tpd/xl2tpd.conf
+sed -ri "s/^ppp debug = yes/ppp debug = no/" /etc/xl2tpd/xl2tpd.conf
+
+sed -i "1 iname xl2tpd" /etc/ppp/options.xl2tpd
+sed -i "1 ahide-password" /etc/ppp/options.xl2tpd
+sed -i "1 arequire-mschap-v2" /etc/ppp/options.xl2tpd
+sed -i "6 ams-dns  8.8.4.4" /etc/ppp/options.xl2tpd
+
+echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+echo "net.ipv4.conf.default.rp_filter = 0" >> /etc/sysctl.conf
+echo "net.ipv4.conf.default.send_redirects = 0" >> /etc/sysctl.conf
+echo "net.ipv4.conf.default.accept_redirects = 0" >> /etc/sysctl.conf
+echo "net.ipv4.conf.all.rp_filter = 0" >> /etc/sysctl.conf
+echo "net.ipv4.conf.all.send_redirects = 0" >> /etc/sysctl.conf
+echo "net.ipv4.conf.all.accept_redirects = 0" >> /etc/sysctl.conf
+echo "net.ipv4.conf.eth0.rp_filter = 0" >> /etc/sysctl.conf
+sysctl -p
+
+iptables -I INPUT -p udp --dport 500 -j ACCEPT
+iptables -I INPUT -p udp --dport 4500 -j ACCEPT
+iptables -I INPUT -p udp --dport 1701 -j ACCEPT
+iptables -I FORWARD -s ${PREFIX}.0/24 -j ACCEPT
+iptables -I FORWARD -d ${PREFIX}.0/24 -j ACCEPT
+iptables -t nat -I POSTROUTING -s ${PREFIX}.0/24 -o eth0 -j MASQUERADE
+service iptables save
+
+systemctl enable ipsec
+systemctl start ipsec
+systemctl enable xl2tpd
+systemctl start xl2tpd
+

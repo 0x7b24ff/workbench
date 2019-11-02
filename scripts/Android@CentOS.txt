@@ -1,0 +1,1 @@
+yum install gcc gcc-c++ autoconf make flex bison gperf libXext alsa-lib mesa-libGL mesa-libGLU expat-devel gettext-devel glibc-devel libao-devel libuuid-devel libX11-devel ncurses-devel openssl-devel SDL-devel uuid-devel zlib-devel

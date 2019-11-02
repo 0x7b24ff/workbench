@@ -1,0 +1,9 @@
+#! /usr/bin/env bash
+
+#rm -rf .git
+git init
+git submodule sync
+git add -A
+git commit -m "."
+git remote add origin git@github.com:0x7b24ff/workbench
+git push origin master -u -f
