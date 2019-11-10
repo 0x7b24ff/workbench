@@ -2,9 +2,7 @@
 
 const
     Fs = require('fs'),
-    Path = require('path'),
-    ReadChunk = require('read-chunk'),
-    FileType = require('file-type')
+    Path = require('path')
 ;
 
 function traverse( dir, fileHandler, dirHandler = null ) {
@@ -37,40 +35,37 @@ function traverse( dir, fileHandler, dirHandler = null ) {
 function main() {
     let
         cwd = Path.resolve( process.cwd() ),
+        pattern = process.argv[2],
+        replacement = process.argv[3],
         confirmed = process.argv.pop() === 'confirm'
     ;
+    if ( process.argv.length < 3 ) {
+        console.log(`Usage: $0 PATTERN REPLACEMENT [confirm]
+Arguments:
+    PATTERN -
+    REPLACEMENT -
+    confirm - Default to dry mode, use the word "confirm" to run in write mode`);
+        process.exit( 1 );
+        return;
+    }
     console.log( confirmed ? `Running in write mode` : `Running in dry mode`);
     traverse( cwd, ( filePath, fileDir ) => {
         let
-            fileExt = Path.extname( filePath ).substr( 1 )
-        ;
-        if ( ! FileType.extensions.has( fileExt )) {
-            return;
-        }
-        let
-            headBuffer = ReadChunk.sync( filePath, 0, FileType.minimumBytes ),
-            typeInfo = FileType( headBuffer )
-        ;
-        if ( ! typeInfo ) {
-            return;
-        }
-        let
-            realExt = typeInfo.ext
-        ;
-        if ( fileExt === realExt ) {
-            return;
-        }
-        let
             oldName = Path.basename( filePath ),
-            newName = Path.basename( oldName, fileExt ) + realExt,
-            newPath = fileDir + Path.sep + newName
+            regexp = new RegExp( pattern )
         ;
-        console.log(`Renaming ${oldName} to ${newName}`);
+        if ( ! regexp.test( oldName )) {
+            console.log(`Skip ${oldName}`);
+            return;
+        }
+        let
+            newName = oldName.replace( regexp, replacement ),
+            newPath = `${fileDir}/${newName}`
+        ;
+        console.log(`Renaming ${oldName} to ${newName} in ${fileDir}`);
         if ( confirmed ) {
             Fs.renameSync( filePath, newPath );
         }
-    }, ( dirPath, dir ) => {
-        console.log(`Checking ${dirPath}/`);
     });
 }
 
