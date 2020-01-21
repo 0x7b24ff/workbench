@@ -49,6 +49,8 @@ Arguments:
         return;
     }
     console.log( confirmed ? `Running in write mode` : `Running in dry mode`);
+    console.log(`PATTERN: ${pattern}`);
+    console.log(`REPLACEMENT: ${replacement}`);
     traverse( cwd, ( filePath, fileDir ) => {
         let
             oldName = Path.basename( filePath ),
