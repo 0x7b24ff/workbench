@@ -16,17 +16,17 @@ function traverse( dir, fileHandler, dirHandler = null ) {
             return;
         }
         let
-            filePath = Path.resolve( dir, name ),
-            fileStat = Fs.statSync( filePath )
+            path = Path.resolve( dir, name ),
+            stat = Fs.statSync( path )
         ;
-        if ( fileStat.isDirectory() ) {
+        if ( stat.isDirectory() ) {
             if ( dirHandler ) {
-                dirHandler( filePath, dir );
+                dirHandler( name, dir, path );
             }
-            traverse( filePath, fileHandler, dirHandler );
-        } else if ( fileStat.isFile() ) {
+            traverse( path, fileHandler, dirHandler );
+        } else if ( stat.isFile() ) {
             if ( fileHandler ) {
-                fileHandler( filePath, dir );
+                fileHandler( name, dir, path );
             }
         } else {
             // Skip
@@ -40,7 +40,7 @@ function main() {
         confirmed = process.argv.pop() === 'confirm'
     ;
     console.log( confirmed ? `Running in write mode` : `Running in dry mode`);
-    traverse( cwd, ( filePath, fileDir ) => {
+    traverse( cwd, ( fileName, fileDir, filePath ) => {
         let
             fileExt = Path.extname( filePath ).substr( 1 )
         ;

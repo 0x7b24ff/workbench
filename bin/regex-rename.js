@@ -14,17 +14,17 @@ function traverse( dir, fileHandler, dirHandler = null ) {
             return;
         }
         let
-            filePath = Path.resolve( dir, name ),
-            fileStat = Fs.statSync( filePath )
+            path = Path.resolve( dir, name ),
+            stat = Fs.statSync( filePath )
         ;
-        if ( fileStat.isDirectory() ) {
+        if ( stat.isDirectory() ) {
             if ( dirHandler ) {
-                dirHandler( filePath, dir );
+                dirHandler( name, dir, path );
             }
-            traverse( filePath, fileHandler, dirHandler );
-        } else if ( fileStat.isFile() ) {
+            traverse( path, fileHandler, dirHandler );
+        } else if ( stat.isFile() ) {
             if ( fileHandler ) {
-                fileHandler( filePath, dir );
+                fileHandler( name, dir, path );
             }
         } else {
             // Skip
@@ -51,20 +51,19 @@ Arguments:
     console.log( confirmed ? `Running in write mode` : `Running in dry mode`);
     console.log(`PATTERN: ${pattern}`);
     console.log(`REPLACEMENT: ${replacement}`);
-    traverse( cwd, ( filePath, fileDir ) => {
+    traverse( cwd, ( fileName, fileDir, filePath ) => {
         let
-            oldName = Path.basename( filePath ),
             regexp = new RegExp( pattern )
         ;
-        if ( ! regexp.test( oldName )) {
-            console.log(`Skip ${oldName}`);
+        if ( ! regexp.test( fileName )) {
+            console.log(`Skip ${fileName}`);
             return;
         }
         let
-            newName = oldName.replace( regexp, replacement ),
+            newName = fileName.replace( regexp, replacement ),
             newPath = `${fileDir}/${newName}`
         ;
-        console.log(`Renaming ${oldName} to ${newName} in ${fileDir}`);
+        console.log(`Renaming ${fileName} to ${newName} in ${fileDir}`);
         if ( confirmed ) {
             Fs.renameSync( filePath, newPath );
         }
