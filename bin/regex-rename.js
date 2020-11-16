@@ -5,6 +5,12 @@ const
     Path = require('path')
 ;
 
+const
+    RE_FUNC = /@\{([A-Z]+)\:?([^{}]*)\}/g,
+    DELIMITER_PARAMS = ',',
+    DELIMITER_ASSIGN = '='
+;
+
 function traverse( dir, fileHandler, dirHandler = null ) {
     let
         files = Fs.readdirSync( dir )
@@ -15,7 +21,7 @@ function traverse( dir, fileHandler, dirHandler = null ) {
         }
         let
             path = Path.resolve( dir, name ),
-            stat = Fs.statSync( filePath )
+            stat = Fs.statSync( path )
         ;
         if ( stat.isDirectory() ) {
             if ( dirHandler ) {
@@ -32,6 +38,31 @@ function traverse( dir, fileHandler, dirHandler = null ) {
     });
 }
 
+function parseParameters( text ) {
+    let
+        params = {}
+    ;
+    text.split( DELIMITER_PARAMS ).forEach(( v ) => {
+        let
+            pair = v.split( DELIMITER_ASSIGN )
+        ;
+        if ( pair[0] ) {
+            params[ pair[0].toLowerCase() ] = pair[1];
+        }
+    });
+    return params;
+}
+
+function padStart( value, length, padding = '0' ) {
+    let
+        str = String( value )
+    ;
+    if ( str.length >= length ) {
+        return str;
+    }
+    return padding.repeat( length - str.length ) + str;
+}
+
 function main() {
     let
         cwd = Path.resolve( process.cwd() ),
@@ -40,17 +71,39 @@ function main() {
         confirmed = process.argv.pop() === 'confirm'
     ;
     if ( process.argv.length < 3 ) {
-        console.log(`Usage: $0 PATTERN REPLACEMENT [confirm]
+        console.log(`Usage: $0 PATTERN FILENAME [confirm]
 Arguments:
-    PATTERN -
-    REPLACEMENT -
-    confirm - Default to dry mode, use the word "confirm" to run in write mode`);
+    PATTERN - A JavaScript regular expression to match the files
+    FILENAME - The new filename for the matched files, with extra functionality
+    Default in dry mode, pass "confirm" as the last argument to run in write mode`);
         process.exit( 1 );
         return;
     }
     console.log( confirmed ? `Running in write mode` : `Running in dry mode`);
     console.log(`PATTERN: ${pattern}`);
     console.log(`REPLACEMENT: ${replacement}`);
+    let
+        filters = [],
+        matches = RE_FUNC.exec( replacement );
+    ;
+    while ( matches ) {
+        let
+            expression = matches[0],
+            identifier = matches[1],
+            params = parseParameters( matches[2] );
+        ;
+        switch ( identifier ) {
+        case 'INDEX':
+            let
+                index = Number( params.start ) || 0
+            ;
+            console.log( params, index );
+            filters.push(( name ) => {
+                return name.replace( expression, padStart( index++, 3 ));
+            });
+        }
+        matches = RE_FUNC.exec( replacement );
+    }
     traverse( cwd, ( fileName, fileDir, filePath ) => {
         let
             regexp = new RegExp( pattern )
@@ -60,7 +113,9 @@ Arguments:
             return;
         }
         let
-            newName = fileName.replace( regexp, replacement ),
+            newName = filters.reduce(( name, func ) => {
+                return func( name );
+            }, fileName.replace( regexp, replacement )),
             newPath = `${fileDir}/${newName}`
         ;
         console.log(`Renaming ${fileName} to ${newName} in ${fileDir}`);
