@@ -1,7 +1,7 @@
 
 # Aliases
 alias b='cd ..'
-alias cp='cp -nv'
+alias cp='cp -iv'
 alias f='cd'
 alias ga='git add -A'
 alias gau='git add -u'
@@ -21,7 +21,7 @@ alias l='ls -alG'
 alias l1='ls -a1G'
 alias la='ls -aG'
 alias ll='ls -alG'
-alias mv='mv -nv'
+alias mv='mv -iv'
 alias rm='rm -iv'
 alias rmn='/bin/rm'
 alias rmnf='/bin/rm -rf'

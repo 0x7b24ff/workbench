@@ -50,6 +50,9 @@ function main() {
         cwd = Path.resolve( process.cwd() ),
         map = {}  // { DIR_PATH => { files: 0, size: 0 } }
     ;
+    // Current folder
+    map[ cwd ] = { files: 0, size: 0 };
+    // Recursively
     traverse( cwd, ( fileName, fileDir, filePath ) => {
         let
             fileStats = Fs.statSync( filePath )
@@ -59,7 +62,7 @@ function main() {
     }, ( dirPath, dir ) => {
         map[ fileDir ] = { files: 0, size: 0 };
     });
-    for ( let dir of map ) {
+    for ( let dir in map ) {
         let
             { files, size } = map[ dir ],
             weight = Math.round( size * 100 / files ) / 100
