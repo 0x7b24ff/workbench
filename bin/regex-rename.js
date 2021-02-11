@@ -8,34 +8,113 @@ const
 const
     RE_FUNC = /@\{([A-Z]+)\:?([^{}]*)\}/g,
     DELIMITER_PARAMS = ',',
-    DELIMITER_ASSIGN = '='
+    DELIMITER_ASSIGN = '=',
+    DEFAULT_OPTIONS = {
+        directory: true,
+        file: true,
+        recursive: false
+    }
 ;
 
-function traverse( dir, fileHandler, dirHandler = null ) {
+function main() {
+    // Usage
+    if ( process.argv.length < 4 ) {
+        console.log(`Usage: $0 [OPTIONS] PATTERN FILENAME [confirm]
+Arguments:
+    PATTERN - A JavaScript regular expression to match the files
+    FILENAME - The new filename for the matched files, with extra functionality
+    Default in dry mode, pass "confirm" as the last argument to run in write mode`);
+        process.exit( 1 );
+        return;
+    }
+    // Arguments and options
     let
-        files = Fs.readdirSync( dir )
+        cwd = Path.resolve( process.cwd() ),
+        argCursor = 2,
+        options = parseOptions( process.argv[ argCursor ]) || DEFAULT_OPTIONS,
+        pattern, replacement, confirmed
     ;
-    files.forEach(( name ) => {
-        if ( name === '.' || name === '..' ) {
-            return;
-        }
+    // Pattern and replacement
+    pattern = process.argv[ argCursor++ ];
+    replacement = process.argv[ argCursor++ ];
+    confirmed = process.argv[ argCursor ] === 'confirm';
+    console.log( confirmed ? `Running in write mode` : `Running in dry mode`);
+    console.log(`PATTERN: ${pattern}`);
+    console.log(`REPLACEMENT: ${replacement}`);
+    // Parameters
+    let
+        filters = [],
+        matches = RE_FUNC.exec( replacement );
+    ;
+    while ( matches ) {
         let
-            path = Path.resolve( dir, name ),
-            stat = Fs.statSync( path )
+            expression = matches[0],
+            identifier = matches[1],
+            params = parseParameters( matches[2] );
         ;
-        if ( stat.isDirectory() ) {
-            if ( dirHandler ) {
-                dirHandler( name, dir, path );
-            }
-            traverse( path, fileHandler, dirHandler );
-        } else if ( stat.isFile() ) {
-            if ( fileHandler ) {
-                fileHandler( name, dir, path );
-            }
-        } else {
-            // Skip
+        switch ( identifier ) {
+        case 'INDEX':
+            let
+                index = Number( params.start ) || 0
+            ;
+            filters.push(( name ) => {
+                return name.replace( expression, padStart( index++, 3 ));
+            });
+        }
+        matches = RE_FUNC.exec( replacement );
+    }
+    // Process
+    let
+        traverseHandler = ( fileName, fileDir, filePath ) => {
+            regexRename({
+                fileName,
+                fileDir,
+                pattern,
+                replacement,
+                filters,
+                confirmed
+            });
+        }
+    ;
+    scanDir({
+        dir: cwd,
+        fileHandler: options.file ? traverseHandler : null,
+        dirHandler: options.directory ? traverseHandler : null,
+        recursive: options.recursive
+    });
+}
+
+function padStart( value, length, padding = '0' ) {
+    let
+        str = String( value )
+    ;
+    if ( str.length >= length ) {
+        return str;
+    }
+    return padding.repeat( length - str.length ) + str;
+}
+
+function parseOptions( text ) {
+    if ( text[0] !== '-' ) {
+        return null;
+    }
+    let
+        options = Object.assign({}, DEFAULT_OPTIONS );
+    ;
+    text.substr( 1 ).split('').forEach(( v ) => {
+        switch ( v ) {
+        case 'd':
+            options.directory = true;
+            break;
+        case 'f':
+            options.file = true;
+            break;
+        case 'r':
+            options.recursive = true;
+            break;
         }
     });
+    return options;
 }
 
 function parseParameters( text ) {
@@ -53,74 +132,68 @@ function parseParameters( text ) {
     return params;
 }
 
-function padStart( value, length, padding = '0' ) {
+function regexRename({
+    fileName,
+    fileDir,
+    pattern,
+    replacement,
+    filters = [],
+    confirmed = false
+}) {
     let
-        str = String( value )
+        regexp = new RegExp( pattern )
     ;
-    if ( str.length >= length ) {
-        return str;
-    }
-    return padding.repeat( length - str.length ) + str;
-}
-
-function main() {
-    let
-        cwd = Path.resolve( process.cwd() ),
-        pattern = process.argv[2],
-        replacement = process.argv[3],
-        confirmed = process.argv.pop() === 'confirm'
-    ;
-    if ( process.argv.length < 3 ) {
-        console.log(`Usage: $0 PATTERN FILENAME [confirm]
-Arguments:
-    PATTERN - A JavaScript regular expression to match the files
-    FILENAME - The new filename for the matched files, with extra functionality
-    Default in dry mode, pass "confirm" as the last argument to run in write mode`);
-        process.exit( 1 );
+    if ( ! regexp.test( fileName )) {
+        console.log(`Skip ${fileName}`);
         return;
     }
-    console.log( confirmed ? `Running in write mode` : `Running in dry mode`);
-    console.log(`PATTERN: ${pattern}`);
-    console.log(`REPLACEMENT: ${replacement}`);
     let
-        filters = [],
-        matches = RE_FUNC.exec( replacement );
+        newName = filters.reduce(( name, func ) => {
+            return func( name );
+        }, fileName.replace( regexp, replacement )),
+        newPath = `${fileDir}/${newName}`
     ;
-    while ( matches ) {
-        let
-            expression = matches[0],
-            identifier = matches[1],
-            params = parseParameters( matches[2] );
-        ;
-        switch ( identifier ) {
-        case 'INDEX':
-            let
-                index = Number( params.start ) || 0
-            ;
-            console.log( params, index );
-            filters.push(( name ) => {
-                return name.replace( expression, padStart( index++, 3 ));
-            });
-        }
-        matches = RE_FUNC.exec( replacement );
+    console.log(`Renaming ${fileName} to ${newName} in ${fileDir}`);
+    if ( confirmed ) {
+        Fs.renameSync( Path.join( fileDir, fileName ), newPath );
     }
-    traverse( cwd, ( fileName, fileDir, filePath ) => {
-        let
-            regexp = new RegExp( pattern )
-        ;
-        if ( ! regexp.test( fileName )) {
-            console.log(`Skip ${fileName}`);
+}
+
+function scanDir({
+    dir,
+    fileHandler = null,
+    dirHandler = null,
+    recursive = false
+}) {
+    let
+        files = Fs.readdirSync( dir )
+    ;
+    files.forEach(( name ) => {
+        if ( name === '.' || name === '..' ) {
             return;
         }
         let
-            newName = filters.reduce(( name, func ) => {
-                return func( name );
-            }, fileName.replace( regexp, replacement )),
-            newPath = `${fileDir}/${newName}`
+            path = Path.resolve( dir, name ),
+            stat = Fs.statSync( path )
         ;
-        console.log(`Renaming ${fileName} to ${newName} in ${fileDir}`);
-        if ( confirmed ) {
-            Fs.renameSync( filePath, newPath );
+        if ( stat.isDirectory() ) {
+            if ( dirHandler ) {
+                dirHandler( name, dir, path );
+            }
+            if ( recursive ) {
+                scanDir({
+                    dir: path,
+                    fileHandler,
+                    dirHandler,
+                    recursive
+                });
+            }
+        } else if ( stat.isFile() ) {
+            if ( fileHandler ) {
+                fileHandler( name, dir, path );
+            }
+        } else {
+            // Skip
         }
     });
 }
