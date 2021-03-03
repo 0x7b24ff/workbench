@@ -31,16 +31,19 @@ Arguments:
     let
         cwd = Path.resolve( process.cwd() ),
         argCursor = 2,
-        options = parseOptions( process.argv[ argCursor ]) || DEFAULT_OPTIONS,
+        options = parseOptions( process.argv[ argCursor ]),
         pattern, replacement, confirmed
     ;
     // Pattern and replacement
+    argCursor += Number( !! options );
     pattern = process.argv[ argCursor++ ];
     replacement = process.argv[ argCursor++ ];
     confirmed = process.argv[ argCursor ] === 'confirm';
     console.log( confirmed ? `Running in write mode` : `Running in dry mode`);
     console.log(`PATTERN: ${pattern}`);
     console.log(`REPLACEMENT: ${replacement}`);
+    // Default options if null
+    options = options || DEFAULT_OPTIONS;
     // Parameters
     let
         filters = [],
@@ -57,6 +60,7 @@ Arguments:
             let
                 index = Number( params.start ) || 0
             ;
+            console.log( params, index );
             filters.push(( name ) => {
                 return name.replace( expression, padStart( index++, 3 ));
             });
@@ -95,6 +99,7 @@ function padStart( value, length, padding = '0' ) {
 }
 
 function parseOptions( text ) {
+	text = text.trim();
     if ( text[0] !== '-' ) {
         return null;
     }
@@ -151,11 +156,12 @@ function regexRename({
         newName = filters.reduce(( name, func ) => {
             return func( name );
         }, fileName.replace( regexp, replacement )),
-        newPath = `${fileDir}/${newName}`
+        newPath = `${fileDir}/${newName}`,
+        filePath = `${fileDir}/${fileName}`
     ;
     console.log(`Renaming ${fileName} to ${newName} in ${fileDir}`);
     if ( confirmed ) {
-        Fs.renameSync( Path.join( fileDir, fileName ), newPath );
+        Fs.renameSync( filePath, newPath );
     }
 }
 
